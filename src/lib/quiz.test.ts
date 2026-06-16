@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseQuiz, QuizValidationError, timeLimitFor } from './quiz'
+import { parseQuiz, QuizValidationError, shuffleQuiz, timeLimitFor } from './quiz'
 
 const valid = {
   title: 'Test Quiz',
@@ -47,6 +47,38 @@ describe('parseQuiz', () => {
       questions: [{ prompt: 'q', choices: ['a', 'b', 'c', 'd', 'e'], correctIndex: 0 }],
     }
     expect(() => parseQuiz(bad)).toThrow(QuizValidationError)
+  })
+})
+
+describe('shuffleQuiz', () => {
+  const quiz = parseQuiz({
+    title: 'x',
+    questions: [
+      { prompt: 'q1', choices: ['correct', 'b', 'c', 'd'], correctIndex: 0, explanation: 'e1' },
+      { prompt: 'q2', choices: ['a', 'b', 'right'], correctIndex: 2 },
+    ],
+  })
+
+  it('keeps correctIndex pointing at the same answer text after shuffling', () => {
+    for (let trial = 0; trial < 50; trial++) {
+      const shuffled = shuffleQuiz(quiz)
+      shuffled.questions.forEach((q, i) => {
+        const original = quiz.questions[i]
+        // the choice at the (possibly new) correctIndex is still the correct answer
+        expect(q.choices[q.correctIndex]).toBe(original.choices[original.correctIndex])
+        // same set of choices, just reordered
+        expect([...q.choices].sort()).toEqual([...original.choices].sort())
+        // preserves other fields
+        expect(q.prompt).toBe(original.prompt)
+        expect(q.explanation).toBe(original.explanation)
+      })
+    }
+  })
+
+  it('does not mutate the original quiz', () => {
+    const before = JSON.stringify(quiz)
+    shuffleQuiz(quiz)
+    expect(JSON.stringify(quiz)).toBe(before)
   })
 })
 

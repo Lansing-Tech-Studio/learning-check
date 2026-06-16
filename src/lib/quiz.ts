@@ -82,3 +82,28 @@ export async function fetchQuiz(url: string): Promise<Quiz> {
 export function timeLimitFor(quiz: Quiz, index: number): number {
   return quiz.questions[index]?.timeLimit ?? quiz.defaultTimeLimit ?? 30
 }
+
+/**
+ * Return a copy of the quiz with each question's answer choices shuffled (Fisher-Yates)
+ * and `correctIndex` remapped to wherever the correct choice landed. Quizzes are often
+ * authored with the correct answer first; shuffling at session-creation time keeps the
+ * correct answer's position unpredictable while staying consistent for everyone in the
+ * session.
+ */
+export function shuffleQuiz(quiz: Quiz): Quiz {
+  return {
+    ...quiz,
+    questions: quiz.questions.map((q) => {
+      const order = q.choices.map((_, i) => i)
+      for (let i = order.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1))
+        ;[order[i], order[j]] = [order[j], order[i]]
+      }
+      return {
+        ...q,
+        choices: order.map((i) => q.choices[i]),
+        correctIndex: order.indexOf(q.correctIndex),
+      }
+    }),
+  }
+}

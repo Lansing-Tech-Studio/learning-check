@@ -12,6 +12,7 @@ import { fetchQuiz, QuizValidationError } from '../lib/quiz'
 import {
   createSession,
   endSession,
+  loadPrivateQuiz,
   revealQuestion,
   showQuestion,
 } from '../lib/session'
@@ -92,13 +93,14 @@ function HostConsole() {
   )
 
   // The quiz is held in memory for the host to drive the round. If the host reloads an
-  // active session, transparently refetch it from the recorded source URL.
+  // active session, read back the stored (shuffled) quiz so the answer order matches what
+  // students already see.
   const refetching = useRef(false)
   useEffect(() => {
     if (code && session && !quiz && !refetching.current) {
       refetching.current = true
-      fetchQuiz(session.sourceUrl)
-        .then(setQuiz)
+      loadPrivateQuiz(code)
+        .then((q) => q && setQuiz(q))
         .catch(() => {})
         .finally(() => (refetching.current = false))
     }
@@ -112,9 +114,13 @@ function HostConsole() {
     autoStarted.current = true
     void (async () => {
       try {
-        const q = await fetchQuiz(quizUrlParam)
-        const c = await createSession(auth.currentUser!.uid, q, quizUrlParam)
-        start(c, q)
+        const raw = await fetchQuiz(quizUrlParam)
+        const { code: c, quiz: shuffled } = await createSession(
+          auth.currentUser!.uid,
+          raw,
+          quizUrlParam,
+        )
+        start(c, shuffled)
       } catch (err) {
         setAutoError(toHostError(err))
       }
@@ -193,11 +199,20 @@ function HostConsole() {
             <h2 className="font-display text-2xl font-bold sm:text-3xl">
               {session.currentQuestion.prompt}
             </h2>
-            <ResultsChart
-              choices={session.currentQuestion.choices}
-              tallies={session.currentTallies}
-              correctIndex={session.revealedCorrectIndex}
-            />
+            {session.currentTallies.some((n) => n > 0) ? (
+              <ResultsChart
+                choices={session.currentQuestion.choices}
+                tallies={session.currentTallies}
+                correctIndex={session.revealedCorrectIndex}
+              />
+            ) : (
+              // No answers came in (e.g. solo presenter mode) — just highlight the answer.
+              <AnswerTiles
+                choices={session.currentQuestion.choices}
+                correctIndex={session.revealedCorrectIndex}
+                presentation
+              />
+            )}
             {quiz?.questions[session.currentIndex]?.explanation && (
               <p className="max-w-2xl rounded-2xl bg-white/5 px-5 py-3 text-center text-slate-300">
                 {quiz.questions[session.currentIndex].explanation}
@@ -274,12 +289,8 @@ function Lobby({
         {playerCount === 0 && <span className="text-slate-500">Waiting for students to join…</span>}
       </div>
 
-      <button
-        className="btn-primary mx-auto text-lg"
-        onClick={onStart}
-        disabled={!canStart || playerCount === 0}
-      >
-        Start quiz →
+      <button className="btn-primary mx-auto text-lg" onClick={onStart} disabled={!canStart}>
+        {playerCount === 0 ? 'Start solo (present answers) →' : 'Start quiz →'}
       </button>
       {!canStart && <p className="text-center text-sm text-slate-500">Loading quiz…</p>}
     </div>
@@ -306,8 +317,8 @@ function Setup({
     setLoading(true)
     setError(null)
     try {
-      const quiz = await fetchQuiz(url.trim())
-      const code = await createSession(auth.currentUser!.uid, quiz, url.trim())
+      const raw = await fetchQuiz(url.trim())
+      const { code, quiz } = await createSession(auth.currentUser!.uid, raw, url.trim())
       onStarted(code, quiz)
     } catch (err) {
       setError(toHostError(err))

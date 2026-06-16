@@ -56,7 +56,8 @@ export interface SessionDoc {
 export interface PrivateQuizDoc {
   /** Duplicated here so the doc's security rule is self-contained (no cross-doc get). */
   hostUid: string
-  questions: QuizQuestion[]
+  /** The full quiz WITH answers, in the (shuffled) order used for this session. */
+  quiz: Quiz
 }
 
 /** A connected student (`sessions/{CODE}/players/{uid}`). */

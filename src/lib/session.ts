@@ -17,7 +17,7 @@ import type {
   SessionDoc,
 } from '../types'
 import { scoreAnswer, tallyResponses } from './scoring'
-import { timeLimitFor } from './quiz'
+import { shuffleQuiz, timeLimitFor } from './quiz'
 
 // Join codes avoid ambiguous characters (no 0/O, 1/I) so they read cleanly on a projector.
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
@@ -50,12 +50,18 @@ function publicQuestion(quiz: Quiz, index: number): PublicQuestion {
 
 // ---- host actions -----------------------------------------------------------
 
-/** Create a new session in the lobby. Returns the unique join code. */
+/**
+ * Create a new session in the lobby. The quiz's answer choices are shuffled here so the
+ * correct answer's position is randomized per launch. Returns the join code AND the
+ * shuffled quiz, which the host must use to drive the round so everyone stays in sync.
+ */
 export async function createSession(
   hostUid: string,
-  quiz: Quiz,
+  rawQuiz: Quiz,
   sourceUrl: string,
-): Promise<string> {
+): Promise<{ code: string; quiz: Quiz }> {
+  const quiz = shuffleQuiz(rawQuiz)
+
   // Find an unused code (collisions are vanishingly rare at classroom scale).
   let code = randomCode()
   for (let attempt = 0; attempt < 5; attempt++) {
@@ -81,13 +87,23 @@ export async function createSession(
 
   const batch = writeBatch(db)
   batch.set(sessionRef(code), { ...session, createdAt: serverTimestamp() })
-  // Correct answers live here, readable only by the host (enforced by rules). hostUid is
-  // duplicated so this doc's rule needs no cross-doc lookup (which would fail in this batch
-  // since the session doc isn't committed yet).
-  batch.set(privateQuizRef(code), { hostUid, questions: quiz.questions })
+  // The full quiz (with answers, in shuffled order) lives here, readable only by the host
+  // (enforced by rules). hostUid is duplicated so this doc's rule needs no cross-doc lookup
+  // (which would fail in this batch since the session doc isn't committed yet).
+  batch.set(privateQuizRef(code), { hostUid, quiz })
   await batch.commit()
 
-  return code
+  return { code, quiz }
+}
+
+/**
+ * Re-read the host's stored (shuffled) quiz — used when the host reloads an active session,
+ * so the answer order matches what students already see. Only the host can read this.
+ */
+export async function loadPrivateQuiz(code: string): Promise<Quiz | null> {
+  const snap = await getDoc(privateQuizRef(code))
+  if (!snap.exists()) return null
+  return (snap.data() as { quiz: Quiz }).quiz
 }
 
 /** Advance to (or start) a question by index. */
