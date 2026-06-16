@@ -1,0 +1,78 @@
+rules_version = '2';
+
+// Security model for the Learning Check live quiz.
+// There is no backend server, so these rules ARE the backend: they keep correct answers
+// hidden from students and ensure only the host can drive the quiz and award scores.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    // The host uid recorded on the parent session document.
+    function sessionHost(code) {
+      return get(/databases/$(database)/documents/sessions/$(code)).data.hostUid;
+    }
+
+    function isHost(code) {
+      return signedIn() && request.auth.uid == sessionHost(code);
+    }
+
+    function activeIndex(code) {
+      return get(/databases/$(database)/documents/sessions/$(code)).data.currentIndex;
+    }
+
+    function sessionStatus(code) {
+      return get(/databases/$(database)/documents/sessions/$(code)).data.status;
+    }
+
+    match /sessions/{code} {
+      // Everyone in the room reads the public session doc (no answers live here).
+      allow read: if signedIn();
+      // The creator must stamp themselves as the host.
+      allow create: if signedIn() && request.resource.data.hostUid == request.auth.uid;
+      // Only the host can drive or delete the session.
+      allow update, delete: if signedIn() && resource.data.hostUid == request.auth.uid;
+
+      // Correct answers + full quiz: host-only. Students literally cannot read this.
+      // The rule is self-contained (checks hostUid stored on the doc itself) so it works
+      // inside the same batch that creates the parent session.
+      match /private/{docId} {
+        allow create: if signedIn() && request.resource.data.hostUid == request.auth.uid;
+        allow read, update, delete: if signedIn() && resource.data.hostUid == request.auth.uid;
+      }
+
+      // Players: anyone in the room can see the roster/leaderboard.
+      match /players/{uid} {
+        allow read: if signedIn();
+        // A student registers only their own player doc, starting at score 0.
+        allow create: if signedIn()
+          && request.auth.uid == uid
+          && request.resource.data.uid == uid
+          && request.resource.data.score == 0;
+        // A student may update their own nickname but NOT their score; the host may
+        // update any player's score (to award points on reveal).
+        allow update: if isHost(code)
+          || (request.auth.uid == uid
+              && request.resource.data.score == resource.data.score);
+        allow delete: if isHost(code);
+      }
+
+      // Responses: write-once answers. Host-only reads keep tallies private until reveal.
+      match /responses/{responseId} {
+        allow read: if isHost(code);
+        // A student creates exactly one answer for the currently-active question.
+        // The doc id is locked to `<questionIndex>_<uid>`, so a student can submit at
+        // most one answer per question, and only while that question is live.
+        allow create: if signedIn()
+          && request.resource.data.uid == request.auth.uid
+          && responseId == string(request.resource.data.questionIndex) + '_' + request.auth.uid
+          && request.resource.data.questionIndex == activeIndex(code)
+          && sessionStatus(code) == 'question';
+        // No updates or deletes: answers are final once locked in.
+      }
+    }
+  }
+}

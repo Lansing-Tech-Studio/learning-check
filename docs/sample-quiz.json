@@ -1,0 +1,32 @@
+{
+  "title": "Sample Learning Check",
+  "workshop": "demo",
+  "description": "A short demo quiz for trying out Learning Check.",
+  "defaultTimeLimit": 25,
+  "questions": [
+    {
+      "prompt": "What does HTML stand for?",
+      "choices": [
+        "HyperText Markup Language",
+        "Hyperlinks and Text Markup Language",
+        "Home Tool Markup Language",
+        "Hyperloop Machine Language"
+      ],
+      "correctIndex": 0,
+      "explanation": "HTML = HyperText Markup Language — the structure of web pages."
+    },
+    {
+      "prompt": "Which symbol starts a single-line comment in JavaScript?",
+      "choices": ["#", "//", "<!--", "**"],
+      "correctIndex": 1,
+      "explanation": "// begins a single-line comment in JavaScript.",
+      "timeLimit": 15
+    },
+    {
+      "prompt": "What is 2 ** 3 in JavaScript?",
+      "choices": ["6", "8", "9", "23"],
+      "correctIndex": 1,
+      "explanation": "** is exponentiation, so 2 ** 3 = 2 × 2 × 2 = 8."
+    }
+  ]
+}
