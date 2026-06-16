@@ -23,6 +23,27 @@ Firestore for live state, and Firebase Auth — no Cloud Functions, no billing r
 See [`docs/quiz-schema.md`](./docs/quiz-schema.md) for the quiz file format and
 [`docs/sample-quiz.json`](./docs/sample-quiz.json) for a working example.
 
+## One-click host links (for slides)
+
+You can link straight into host mode with a quiz pre-loaded — handy for a workshop slide:
+
+```
+https://<your-app>/host?quiz=<url-encoded quiz URL>
+```
+
+For example, to host the JavaScript Basics quiz:
+
+```
+https://learning-check.web.app/host?quiz=https%3A%2F%2Flansingtechstudio.org%2Fworkshops%2Fjavascript-basics%2Fquiz.json
+```
+
+Opening it signs you in (if needed), fetches the quiz, and drops you straight into the
+lobby with a join code — no pasting. The URL then becomes `…/host?session=CODE`, so a
+refresh resumes the same live session instead of starting a new one.
+
+The easiest way to get one: on the **Start a quiz** screen, paste your quiz URL and copy
+the generated **📎 Slide link**.
+
 ## Quick start (local development)
 
 ```bash

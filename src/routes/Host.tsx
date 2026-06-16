@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { signInWithPopup, signOut } from 'firebase/auth'
 import { auth, googleProvider } from '../firebase'
 import { Shell } from '../components/Shell'
@@ -15,6 +16,16 @@ import {
   showQuestion,
 } from '../lib/session'
 import type { Quiz } from '../types'
+
+interface HostError {
+  message: string
+  issues: string[]
+}
+
+function toHostError(err: unknown): HostError {
+  if (err instanceof QuizValidationError) return { message: err.message, issues: err.issues }
+  return { message: err instanceof Error ? err.message : 'Something went wrong.', issues: [] }
+}
 
 export function Host() {
   const user = useAuthUser()
@@ -59,10 +70,26 @@ function SignIn() {
 
 function HostConsole() {
   const user = useAuthUser()
+  const [params, setParams] = useSearchParams()
+  const quizUrlParam = params.get('quiz') ?? ''
+  const sessionParam = params.get('session') ?? undefined
+
   const [quiz, setQuiz] = useState<Quiz | null>(null)
-  const [code, setCode] = useState<string | undefined>()
+  // Resume an existing session if the URL carries ?session=CODE (e.g. after a refresh).
+  const [code, setCode] = useState<string | undefined>(sessionParam)
+  const [autoError, setAutoError] = useState<HostError | null>(null)
   const session = useSession(code)
   const players = usePlayers(code)
+
+  const start = useCallback(
+    (c: string, q: Quiz) => {
+      setCode(c)
+      setQuiz(q)
+      // Swap the URL to ?session=CODE so a refresh resumes instead of starting a new quiz.
+      setParams({ session: c }, { replace: true })
+    },
+    [setParams],
+  )
 
   // The quiz is held in memory for the host to drive the round. If the host reloads an
   // active session, transparently refetch it from the recorded source URL.
@@ -77,8 +104,38 @@ function HostConsole() {
     }
   }, [code, session, quiz])
 
-  if (!code || !session) {
-    return <Setup onStarted={(c, q) => { setCode(c); setQuiz(q) }} userEmail={user?.email ?? ''} />
+  // Deep link: /host?quiz=<url> auto-loads the quiz and opens the lobby (exactly once),
+  // so an instructor can jump straight here from a workshop slide.
+  const autoStarted = useRef(false)
+  useEffect(() => {
+    if (code || !quizUrlParam || autoStarted.current) return
+    autoStarted.current = true
+    void (async () => {
+      try {
+        const q = await fetchQuiz(quizUrlParam)
+        const c = await createSession(auth.currentUser!.uid, q, quizUrlParam)
+        start(c, q)
+      } catch (err) {
+        setAutoError(toHostError(err))
+      }
+    })()
+  }, [code, quizUrlParam, start])
+
+  if (!code) {
+    // Auto-loading from a deep link: show a spinner until it resolves (or errors).
+    if (quizUrlParam && !autoError) return <Centered>Loading quiz…</Centered>
+    return (
+      <Setup
+        onStarted={start}
+        userEmail={user?.email ?? ''}
+        initialUrl={quizUrlParam}
+        initialError={autoError}
+      />
+    )
+  }
+  if (session === undefined) return <Centered>Loading…</Centered>
+  if (session === null) {
+    return <Setup onStarted={start} userEmail={user?.email ?? ''} initialUrl="" initialError={null} />
   }
 
   const advance = (index: number) => quiz && showQuestion(code, quiz, index)
@@ -232,35 +289,37 @@ function Lobby({
 function Setup({
   onStarted,
   userEmail,
+  initialUrl,
+  initialError,
 }: {
   onStarted: (code: string, quiz: Quiz) => void
   userEmail: string
+  initialUrl: string
+  initialError: HostError | null
 }) {
-  const [url, setUrl] = useState('')
+  const [url, setUrl] = useState(initialUrl)
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [issues, setIssues] = useState<string[]>([])
+  const [error, setError] = useState<HostError | null>(initialError)
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
     setLoading(true)
     setError(null)
-    setIssues([])
     try {
       const quiz = await fetchQuiz(url.trim())
       const code = await createSession(auth.currentUser!.uid, quiz, url.trim())
       onStarted(code, quiz)
     } catch (err) {
-      if (err instanceof QuizValidationError) {
-        setError(err.message)
-        setIssues(err.issues)
-      } else {
-        setError(err instanceof Error ? err.message : 'Something went wrong.')
-      }
+      setError(toHostError(err))
     } finally {
       setLoading(false)
     }
   }
+
+  // A reusable link an instructor can drop on a slide to jump straight into hosting.
+  const hostLink = url.trim()
+    ? `${window.location.origin}/host?quiz=${encodeURIComponent(url.trim())}`
+    : ''
 
   return (
     <Shell>
@@ -291,10 +350,10 @@ function Setup({
           </button>
           {error && (
             <div className="rounded-2xl border border-choice-0/40 bg-choice-0/10 p-4 text-sm text-red-200">
-              <p className="font-semibold">{error}</p>
-              {issues.length > 0 && (
+              <p className="font-semibold">{error.message}</p>
+              {error.issues.length > 0 && (
                 <ul className="mt-2 list-inside list-disc space-y-1 text-red-300">
-                  {issues.map((iss, i) => (
+                  {error.issues.map((iss, i) => (
                     <li key={i}>{iss}</li>
                   ))}
                 </ul>
@@ -302,7 +361,37 @@ function Setup({
             </div>
           )}
         </form>
+
+        {hostLink && <ShareableLink link={hostLink} />}
       </div>
     </Shell>
+  )
+}
+
+/** Shows a one-click host deep link for the entered quiz, ready to paste on a slide. */
+function ShareableLink({ link }: { link: string }) {
+  const [copied, setCopied] = useState(false)
+  return (
+    <div className="card flex flex-col gap-2 p-5">
+      <p className="text-sm font-semibold text-slate-300">📎 Slide link</p>
+      <p className="text-xs text-slate-500">
+        Put this on a workshop slide to jump straight here with the quiz loaded.
+      </p>
+      <div className="flex gap-2">
+        <input readOnly value={link} className="input text-xs" onFocus={(e) => e.target.select()} />
+        <button
+          type="button"
+          className="btn-ghost shrink-0 text-sm"
+          onClick={() => {
+            void navigator.clipboard?.writeText(link).then(() => {
+              setCopied(true)
+              setTimeout(() => setCopied(false), 1500)
+            })
+          }}
+        >
+          {copied ? 'Copied!' : 'Copy'}
+        </button>
+      </div>
+    </div>
   )
 }
