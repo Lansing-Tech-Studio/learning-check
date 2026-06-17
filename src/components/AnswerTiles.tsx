@@ -40,14 +40,13 @@ export function AnswerTiles({
             className={[
               style.bg,
               'group relative flex items-center gap-4 rounded-2xl px-5 text-left font-semibold text-white',
-              'shadow-lg transition-all duration-200 animate-pop-in',
+              'shadow-lg transition-[opacity,transform,filter,box-shadow] duration-200 ease-out will-change-[opacity,transform]',
               presentation ? 'py-7 text-2xl cursor-default' : 'py-6 text-lg',
               !disabled && !presentation ? 'hover:-translate-y-0.5 hover:brightness-110 active:scale-[0.98]' : '',
               isSelected ? 'ring-4 ring-white ring-offset-2 ring-offset-ink-900' : '',
               dim ? 'opacity-30 saturate-50' : '',
               isCorrect ? 'ring-4 ring-white scale-[1.02]' : '',
             ].join(' ')}
-            style={{ animationDelay: `${i * 60}ms` }}
           >
             <ChoiceShape index={i} className={presentation ? 'h-9 w-9 shrink-0' : 'h-7 w-7 shrink-0'} />
             <span className="flex-1">{choice}</span>
