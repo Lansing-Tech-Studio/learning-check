@@ -9,6 +9,7 @@ import { CountdownRing } from '../components/CountdownRing'
 import { ChoiceShape } from '../components/choices'
 import { useAuthUser, usePlayers, useSession } from '../lib/hooks'
 import { joinSession, submitAnswer } from '../lib/session'
+import { randomName } from '../lib/names'
 
 export function Play() {
   const params = useParams()
@@ -88,9 +89,18 @@ function JoinForm({
             />
           </div>
           <div>
-            <label htmlFor="nick" className="text-sm font-semibold text-slate-300">
-              Your nickname
-            </label>
+            <div className="flex items-center justify-between">
+              <label htmlFor="nick" className="text-sm font-semibold text-slate-300">
+                Your nickname
+              </label>
+              <button
+                type="button"
+                onClick={() => setNickname(randomName())}
+                className="text-xs font-medium text-brand-400 hover:text-brand-300 transition-colors"
+              >
+                🎲 Random
+              </button>
+            </div>
             <input
               id="nick"
               value={nickname}
