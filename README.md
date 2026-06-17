@@ -87,6 +87,22 @@ Open the printed URL. Use one tab as the instructor (`/host`) and another as a s
 | `npm run build` | Type-check and build to `dist/`. |
 | `npm test` | Run unit + rules tests (Vitest). |
 
+## GitHub Actions deploy (main branch)
+
+This repo includes a workflow at `.github/workflows/deploy-firebase.yml` that:
+
+- Runs tests and build on every push to `main`.
+- Deploys to Firebase only if those checks pass.
+
+Set the following repository secret before using it:
+
+- `GCP_SERVICE_ACCOUNT_EMAIL`: Service account email used for deploys.
+  - this can be found under [Service Accounts](https://console.cloud.google.com/iam-admin/serviceaccounts?cloudshell=true&project=learning-check)
+- `GCP_WORKLOAD_IDENTITY_PROVIDER`: Full Workload Identity Provider resource name.
+  - find this using GCP cloud shell and running `gcloud iam workload-identity-pools providers list --project=learning-check --location=global --workload-identity-pool=github-actions-pool --format="value(name)"`
+
+The workflow deploys `hosting`, `firestore.rules`, and `firestore.indexes.json`.
+
 ## Tech
 
 React 19 · Vite · TypeScript · Tailwind CSS · Firebase (Firestore + Auth + Hosting) · Zod.
