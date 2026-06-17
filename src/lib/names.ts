@@ -28,6 +28,18 @@ function pick<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)]
 }
 
+const adjectiveSet = new Set(ADJECTIVES)
+const nounSet = new Set(NOUNS)
+
 export function randomName(): string {
   return pick(ADJECTIVES) + pick(NOUNS)
+}
+
+export function isGeneratedName(nickname: string): boolean {
+  for (const adjective of ADJECTIVES) {
+    if (!nickname.startsWith(adjective)) continue
+    const noun = nickname.slice(adjective.length)
+    if (nounSet.has(noun) && adjectiveSet.has(adjective)) return true
+  }
+  return false
 }

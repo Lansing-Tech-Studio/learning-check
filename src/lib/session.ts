@@ -1,5 +1,6 @@
 import {
   collection,
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -16,6 +17,8 @@ import type {
   ResponseDoc,
   SessionDoc,
 } from '../types'
+import { assertAllowedNickname } from './moderation'
+import { isGeneratedName } from './names'
 import { scoreAnswer, tallyResponses } from './scoring'
 import { shuffleQuiz, timeLimitFor } from './quiz'
 
@@ -37,6 +40,8 @@ export const sessionRef = (code: string) => doc(db, 'sessions', code)
 export const privateQuizRef = (code: string) => doc(db, 'sessions', code, 'private', 'quiz')
 export const playersCol = (code: string) => collection(db, 'sessions', code, 'players')
 export const playerRef = (code: string, uid: string) => doc(db, 'sessions', code, 'players', uid)
+export const removedPlayerRef = (code: string, uid: string) =>
+  doc(db, 'sessions', code, 'removed', uid)
 export const responsesCol = (code: string) => collection(db, 'sessions', code, 'responses')
 export const responseRef = (code: string, index: number, uid: string) =>
   doc(db, 'sessions', code, 'responses', `${index}_${uid}`)
@@ -59,6 +64,7 @@ export async function createSession(
   hostUid: string,
   rawQuiz: Quiz,
   sourceUrl: string,
+  options?: { randomNamesOnly?: boolean },
 ): Promise<{ code: string; quiz: Quiz }> {
   const quiz = shuffleQuiz(rawQuiz)
 
@@ -75,6 +81,7 @@ export async function createSession(
     quizTitle: quiz.title,
     workshop: quiz.workshop ?? null,
     sourceUrl,
+    randomNamesOnly: !!options?.randomNamesOnly,
     status: 'lobby',
     questionCount: quiz.questions.length,
     currentIndex: -1,
@@ -170,6 +177,17 @@ export async function endSession(code: string): Promise<void> {
   })
 }
 
+/** Host action: toggle name policy before the quiz starts. */
+export async function setRandomNamesOnly(code: string, enabled: boolean): Promise<void> {
+  const session = (await getDoc(sessionRef(code))).data() as SessionDoc | undefined
+  if (!session) throw new Error('Session not found.')
+  if (session.status !== 'lobby') {
+    throw new Error('Name policy can only be changed while the session is in the lobby.')
+  }
+
+  await updateDoc(sessionRef(code), { randomNamesOnly: enabled })
+}
+
 // ---- student actions --------------------------------------------------------
 
 /** Join a session: confirm it exists and register the player. */
@@ -183,9 +201,19 @@ export async function joinSession(
   const session = snap.data() as SessionDoc
   if (session.status === 'ended') throw new Error('That quiz has already finished.')
 
+  const removed = await getDoc(removedPlayerRef(code, uid))
+  if (removed.exists()) {
+    throw new Error('You have been removed from this quiz by the host.')
+  }
+
+  const safeNickname = await assertAllowedNickname(nickname)
+  if (session.randomNamesOnly && !isGeneratedName(safeNickname)) {
+    throw new Error('This quiz requires a randomly generated nickname.')
+  }
+
   const player: PlayerDoc = {
     uid,
-    nickname: nickname.trim().slice(0, 20),
+    nickname: safeNickname,
     score: 0,
     joinedAt: Date.now(),
   }
@@ -207,4 +235,29 @@ export async function submitAnswer(
   }
   // create-only (rules forbid updates), so a second tap is rejected — the answer is locked.
   await setDoc(responseRef(code, questionIndex, uid), response)
+}
+
+/** Host action: forcibly rename a player shown in the room. */
+export async function renamePlayer(code: string, uid: string, nickname: string): Promise<void> {
+  const session = (await getDoc(sessionRef(code))).data() as SessionDoc | undefined
+  if (!session) throw new Error('Session not found.')
+
+  const safeNickname = await assertAllowedNickname(nickname)
+  if (session.randomNamesOnly && !isGeneratedName(safeNickname)) {
+    throw new Error('This quiz requires generated-style nicknames only.')
+  }
+  await updateDoc(playerRef(code, uid), { nickname: safeNickname })
+}
+
+/** Host action: remove a player and prevent re-joining with the same auth uid. */
+export async function removePlayer(code: string, uid: string): Promise<void> {
+  const batch = writeBatch(db)
+  batch.set(removedPlayerRef(code, uid), { uid, removedAt: serverTimestamp() })
+  batch.delete(playerRef(code, uid))
+  await batch.commit()
+}
+
+/** Host action: allow a previously removed player uid to join again. */
+export async function restorePlayerAccess(code: string, uid: string): Promise<void> {
+  await deleteDoc(removedPlayerRef(code, uid))
 }

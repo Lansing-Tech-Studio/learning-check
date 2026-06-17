@@ -8,8 +8,9 @@ import { Leaderboard } from '../components/Leaderboard'
 import { CountdownRing } from '../components/CountdownRing'
 import { ChoiceShape } from '../components/choices'
 import { useAuthUser, usePlayers, useSession } from '../lib/hooks'
+import { moderateNickname } from '../lib/moderation'
 import { joinSession, submitAnswer } from '../lib/session'
-import { randomName } from '../lib/names'
+import { isGeneratedName, randomName } from '../lib/names'
 
 export function Play() {
   const params = useParams()
@@ -52,6 +53,8 @@ function JoinForm({
   const [nickname, setNickname] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const sessionPreview = useSession(code.trim().toUpperCase())
+  const randomNamesOnly = !!sessionPreview?.randomNamesOnly
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
@@ -59,7 +62,18 @@ function JoinForm({
     setLoading(true)
     setError(null)
     try {
-      await joinSession(clean, uid, nickname)
+      const moderated = await moderateNickname(nickname)
+      if (!moderated.allowed) {
+        setError(moderated.reason)
+        return
+      }
+
+      if (randomNamesOnly && !isGeneratedName(moderated.nickname)) {
+        setError('This quiz only allows randomly generated names.')
+        return
+      }
+
+      await joinSession(clean, uid, moderated.nickname)
       onJoined(clean)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not join.')
@@ -95,7 +109,18 @@ function JoinForm({
               </label>
               <button
                 type="button"
-                onClick={() => setNickname(randomName())}
+                onClick={async () => {
+                  for (let attempt = 0; attempt < 5; attempt++) {
+                    const candidate = randomName()
+                    const moderated = await moderateNickname(candidate)
+                    if (moderated.allowed) {
+                      setNickname(moderated.nickname)
+                      setError(null)
+                      return
+                    }
+                  }
+                  setError('Could not find a safe random nickname. Try typing your own.')
+                }}
                 className="text-xs font-medium text-brand-400 hover:text-brand-300 transition-colors"
               >
                 🎲 Random
@@ -109,8 +134,14 @@ function JoinForm({
               maxLength={20}
               autoComplete="off"
               className="input mt-1"
+              readOnly={randomNamesOnly}
               required
             />
+            {randomNamesOnly && (
+              <p className="mt-2 text-xs text-slate-400">
+                This host requires generated names. Use the random button.
+              </p>
+            )}
           </div>
           <button type="submit" className="btn-primary text-lg" disabled={loading || !code.trim() || !nickname.trim()}>
             {loading ? 'Joining…' : "Let's go →"}
@@ -125,6 +156,7 @@ function JoinForm({
 function PlayRound({ code, uid }: { code: string; uid: string }) {
   const session = useSession(code)
   const players = usePlayers(code)
+  const [wasPresent, setWasPresent] = useState(false)
   const [picked, setPicked] = useState<number | null>(null)
   const [pickedIndex, setPickedIndex] = useState<number | null>(null)
 
@@ -136,10 +168,25 @@ function PlayRound({ code, uid }: { code: string; uid: string }) {
     }
   }, [session?.status, session?.currentIndex])
 
+  const me = players.find((p) => p.uid === uid)
+  useEffect(() => {
+    if (me) setWasPresent(true)
+  }, [me])
+
   if (session === undefined) return <Centered>Loading…</Centered>
   if (session === null) return <Centered>That quiz is no longer available.</Centered>
 
-  const me = players.find((p) => p.uid === uid)
+  if (wasPresent && !me) {
+    return (
+      <Centered>
+        <div className="text-center">
+          <h2 className="font-display text-2xl font-bold">You were removed from this quiz.</h2>
+          <p className="mt-2 text-slate-400">Only the host can add you back.</p>
+        </div>
+      </Centered>
+    )
+  }
+  if (!me) return <Centered>Loading…</Centered>
 
   async function pick(choice: number) {
     if (picked != null || !session || session.status !== 'question') return
@@ -185,7 +232,7 @@ function PlayRound({ code, uid }: { code: string; uid: string }) {
           <RevealResult
             correct={picked != null && picked === session.revealedCorrectIndex}
             answered={picked != null}
-            score={me?.score ?? 0}
+            score={me.score}
           />
         )}
 

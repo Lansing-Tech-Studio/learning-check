@@ -56,6 +56,10 @@
     @apply btn bg-white/5 text-slate-100 hover:bg-white/10 border border-white/10;
   }
 
+  .btn-danger {
+    @apply btn bg-choice-0/20 text-red-200 hover:bg-choice-0/30 border border-choice-0/40;
+  }
+
   .input {
     @apply w-full rounded-2xl border border-white/10 bg-ink-900/60 px-5 py-4 text-lg
       placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-400;

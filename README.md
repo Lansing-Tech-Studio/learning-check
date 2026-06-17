@@ -31,6 +31,14 @@ You can link straight into host mode with a quiz pre-loaded — handy for a work
 https://<your-app>/host?quiz=<url-encoded quiz URL>
 ```
 
+You can also set the name-policy default in the link:
+
+```
+https://<your-app>/host?quiz=<url-encoded quiz URL>&randomNamesOnly=1
+```
+
+Accepted truthy values are `1`, `true`, `yes`, `on`, or `random`.
+
 For example, to host the JavaScript Basics quiz:
 
 ```
@@ -43,6 +51,26 @@ refresh resumes the same live session instead of starting a new one.
 
 The easiest way to get one: on the **Start a quiz** screen, paste your quiz URL and copy
 the generated **📎 Slide link**.
+
+## Student name policy controls
+
+Hosts can enforce safer naming in two ways:
+
+- **Moderation filter**: offensive names are blocked.
+- **Random names only**: students must use generated names like `PixelNinja`.
+
+How random-name policy works:
+
+- You can set it before launch on **Start a quiz**.
+- You can include it in static host links via `randomNamesOnly=1`.
+- While the session is still in **Lobby**, the host can toggle it on/off.
+- Once the quiz has started, the policy is locked for that session.
+
+When enabled:
+
+- Student join UI makes nickname entry read-only and directs students to the random button.
+- Host rename controls include a **🎲 Random** shortcut.
+- Join/rename is validated in app logic and Firestore rules.
 
 ## Quick start (local development)
 

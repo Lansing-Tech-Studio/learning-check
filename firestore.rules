@@ -28,13 +28,49 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/sessions/$(code)).data.status;
     }
 
+    function randomNamesOnly(code) {
+      return get(/databases/$(database)/documents/sessions/$(code)).data.randomNamesOnly == true;
+    }
+
+    function playerPath(code, uid) {
+      return /databases/$(database)/documents/sessions/$(code)/players/$(uid);
+    }
+
+    function removedPath(code, uid) {
+      return /databases/$(database)/documents/sessions/$(code)/removed/$(uid);
+    }
+
+    function hasValidNickname(data) {
+      return data.nickname is string
+        && data.nickname.size() <= 20
+        && data.nickname.matches('.*\\S.*');
+    }
+
+    function matchesGeneratedStyle(data) {
+      return data.nickname.matches('^[A-Z][a-z]+[A-Z][a-z]+$');
+    }
+
+    function nicknameAllowedForSession(code, data) {
+      return hasValidNickname(data)
+        && (!randomNamesOnly(code) || matchesGeneratedStyle(data));
+    }
+
+    function validSessionPolicy(data) {
+      return data.randomNamesOnly is bool;
+    }
+
     match /sessions/{code} {
       // Everyone in the room reads the public session doc (no answers live here).
       allow read: if signedIn();
       // The creator must stamp themselves as the host.
-      allow create: if signedIn() && request.resource.data.hostUid == request.auth.uid;
+      allow create: if signedIn()
+        && request.resource.data.hostUid == request.auth.uid
+        && validSessionPolicy(request.resource.data);
       // Only the host can drive or delete the session.
-      allow update, delete: if signedIn() && resource.data.hostUid == request.auth.uid;
+      allow update: if signedIn()
+        && resource.data.hostUid == request.auth.uid
+        && validSessionPolicy(request.resource.data);
+      allow delete: if signedIn() && resource.data.hostUid == request.auth.uid;
 
       // Correct answers + full quiz: host-only. Students literally cannot read this.
       // The rule is self-contained (checks hostUid stored on the doc itself) so it works
@@ -51,13 +87,24 @@ service cloud.firestore {
         allow create: if signedIn()
           && request.auth.uid == uid
           && request.resource.data.uid == uid
-          && request.resource.data.score == 0;
+          && request.resource.data.score == 0
+          && !exists(removedPath(code, uid))
+          && nicknameAllowedForSession(code, request.resource.data);
         // A student may update their own nickname but NOT their score; the host may
         // update any player's score (to award points on reveal).
         allow update: if isHost(code)
+          && nicknameAllowedForSession(code, request.resource.data)
           || (request.auth.uid == uid
-              && request.resource.data.score == resource.data.score);
+              && request.resource.data.score == resource.data.score
+              && nicknameAllowedForSession(code, request.resource.data));
         allow delete: if isHost(code);
+      }
+
+      // Host-only marker docs to block removed students from rejoining/responding.
+      match /removed/{uid} {
+        allow read: if isHost(code)
+          || (signedIn() && request.auth.uid == uid);
+        allow create, delete: if isHost(code);
       }
 
       // Responses: write-once answers. Host-only reads keep tallies private until reveal.
@@ -70,6 +117,8 @@ service cloud.firestore {
           && request.resource.data.uid == request.auth.uid
           && responseId == string(request.resource.data.questionIndex) + '_' + request.auth.uid
           && request.resource.data.questionIndex == activeIndex(code)
+          && exists(playerPath(code, request.auth.uid))
+          && !exists(removedPath(code, request.auth.uid))
           && sessionStatus(code) == 'question';
         // No updates or deletes: answers are final once locked in.
       }

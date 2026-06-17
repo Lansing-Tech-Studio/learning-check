@@ -8,12 +8,16 @@ import { ResultsChart } from '../components/ResultsChart'
 import { Leaderboard } from '../components/Leaderboard'
 import { CountdownRing } from '../components/CountdownRing'
 import { useAuthUser, usePlayers, useSession } from '../lib/hooks'
+import { randomName } from '../lib/names'
 import { fetchQuiz, QuizValidationError } from '../lib/quiz'
 import {
   createSession,
   endSession,
   loadPrivateQuiz,
+  removePlayer,
+  renamePlayer,
   revealQuestion,
+  setRandomNamesOnly,
   showQuestion,
 } from '../lib/session'
 import type { Quiz } from '../types'
@@ -26,6 +30,12 @@ interface HostError {
 function toHostError(err: unknown): HostError {
   if (err instanceof QuizValidationError) return { message: err.message, issues: err.issues }
   return { message: err instanceof Error ? err.message : 'Something went wrong.', issues: [] }
+}
+
+function parseRandomNamesOnlyParam(value: string | null): boolean {
+  if (!value) return false
+  const normalized = value.trim().toLowerCase()
+  return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on' || normalized === 'random'
 }
 
 export function Host() {
@@ -74,6 +84,9 @@ function HostConsole() {
   const [params, setParams] = useSearchParams()
   const quizUrlParam = params.get('quiz') ?? ''
   const sessionParam = params.get('session') ?? undefined
+  const randomNamesOnlyParam = parseRandomNamesOnlyParam(
+    params.get('randomNamesOnly') ?? params.get('names'),
+  )
 
   const [quiz, setQuiz] = useState<Quiz | null>(null)
   // Resume an existing session if the URL carries ?session=CODE (e.g. after a refresh).
@@ -119,13 +132,14 @@ function HostConsole() {
           auth.currentUser!.uid,
           raw,
           quizUrlParam,
+          { randomNamesOnly: randomNamesOnlyParam },
         )
         start(c, shuffled)
       } catch (err) {
         setAutoError(toHostError(err))
       }
     })()
-  }, [code, quizUrlParam, start])
+  }, [code, quizUrlParam, randomNamesOnlyParam, start])
 
   if (!code) {
     // Auto-loading from a deep link: show a spinner until it resolves (or errors).
@@ -135,13 +149,22 @@ function HostConsole() {
         onStarted={start}
         userEmail={user?.email ?? ''}
         initialUrl={quizUrlParam}
+        initialRandomNamesOnly={randomNamesOnlyParam}
         initialError={autoError}
       />
     )
   }
   if (session === undefined) return <Centered>Loading…</Centered>
   if (session === null) {
-    return <Setup onStarted={start} userEmail={user?.email ?? ''} initialUrl="" initialError={null} />
+    return (
+      <Setup
+        onStarted={start}
+        userEmail={user?.email ?? ''}
+        initialUrl=""
+        initialRandomNamesOnly={randomNamesOnlyParam}
+        initialError={null}
+      />
+    )
   }
 
   const advance = (index: number) => quiz && showQuestion(code, quiz, index)
@@ -170,7 +193,8 @@ function HostConsole() {
             <Lobby
               code={code}
               playerCount={players.length}
-              players={players}
+              randomNamesOnly={session.randomNamesOnly}
+              onToggleRandomNamesOnly={(enabled) => setRandomNamesOnly(code, enabled)}
               canStart={!!quiz}
               onStart={() => advance(0)}
             />
@@ -247,16 +271,17 @@ function HostConsole() {
           )}
         </div>
 
-        {session.status !== 'ended' && (
-          <aside className="lg:w-80 lg:shrink-0">
-            <div className="lg:sticky lg:top-6">
+        <aside className="lg:w-80 lg:shrink-0">
+          <div className="flex flex-col gap-6 lg:sticky lg:top-6">
+            <section>
               <h3 className="mb-2 text-sm font-semibold uppercase tracking-wider text-slate-300">
                 Leaderboard
               </h3>
               <Leaderboard players={players} limit={5} />
-            </div>
-          </aside>
-        )}
+            </section>
+            <ParticipantManager code={code} players={players} randomNamesOnly={session.randomNamesOnly} />
+          </div>
+        </aside>
       </div>
     </Shell>
   )
@@ -265,17 +290,34 @@ function HostConsole() {
 function Lobby({
   code,
   playerCount,
-  players,
+  randomNamesOnly,
+  onToggleRandomNamesOnly,
   canStart,
   onStart,
 }: {
   code: string
   playerCount: number
-  players: { uid: string; nickname: string; score: number }[]
+  randomNamesOnly: boolean
+  onToggleRandomNamesOnly: (enabled: boolean) => Promise<void>
   canStart: boolean
   onStart: () => void
 }) {
   const joinUrl = `${window.location.origin}/play/${code}`
+  const [savingPolicy, setSavingPolicy] = useState(false)
+  const [policyError, setPolicyError] = useState<string | null>(null)
+
+  async function togglePolicy(enabled: boolean) {
+    setPolicyError(null)
+    setSavingPolicy(true)
+    try {
+      await onToggleRandomNamesOnly(enabled)
+    } catch (err) {
+      setPolicyError(err instanceof Error ? err.message : 'Could not update name policy.')
+    } finally {
+      setSavingPolicy(false)
+    }
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <div className="card flex flex-col items-center gap-3 p-8 text-center">
@@ -289,14 +331,25 @@ function Lobby({
         <p className="break-all text-xs text-slate-600">{joinUrl}</p>
       </div>
 
-      <div className="flex flex-wrap justify-center gap-2">
-        {players.map((p) => (
-          <span key={p.uid} className="rounded-full bg-white/5 px-4 py-2 text-sm font-medium animate-pop-in">
-            {p.nickname}
-          </span>
-        ))}
-        {playerCount === 0 && <span className="text-slate-500">Waiting for students to join…</span>}
-      </div>
+      <p className="text-center text-sm text-slate-400">
+        Name policy: {randomNamesOnly ? 'Random generated names only' : 'Custom names allowed'}
+      </p>
+
+      <label className="mx-auto flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+        <input
+          type="checkbox"
+          checked={randomNamesOnly}
+          onChange={(e) => {
+            void togglePolicy(e.target.checked)
+          }}
+          disabled={savingPolicy}
+          className="h-4 w-4 rounded border-white/20 bg-ink-900"
+        />
+        <span className="text-sm text-slate-200">Random names only</span>
+      </label>
+      {policyError && <p className="text-center text-sm text-choice-0">{policyError}</p>}
+
+      {playerCount === 0 && <p className="text-center text-slate-500">Waiting for students to join…</p>}
 
       <button className="btn-primary mx-auto text-lg" onClick={onStart} disabled={!canStart}>
         {playerCount === 0 ? 'Start solo (present answers) →' : 'Start quiz →'}
@@ -306,18 +359,163 @@ function Lobby({
   )
 }
 
+function ParticipantManager({
+  code,
+  players,
+  randomNamesOnly,
+}: {
+  code: string
+  players: { uid: string; nickname: string; score: number }[]
+  randomNamesOnly: boolean
+}) {
+  const [editingUid, setEditingUid] = useState<string | null>(null)
+  const [draftNickname, setDraftNickname] = useState('')
+  const [busyUid, setBusyUid] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  async function startRename(uid: string, currentNickname: string) {
+    setError(null)
+    setEditingUid(uid)
+    setDraftNickname(currentNickname)
+  }
+
+  async function saveRename(uid: string) {
+    setBusyUid(uid)
+    setError(null)
+    try {
+      await renamePlayer(code, uid, draftNickname)
+      setEditingUid(null)
+      setDraftNickname('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not rename player.')
+    } finally {
+      setBusyUid(null)
+    }
+  }
+
+  async function onRemove(uid: string, nickname: string) {
+    if (!window.confirm(`Remove ${nickname} from this quiz?`)) return
+    setBusyUid(uid)
+    setError(null)
+    try {
+      await removePlayer(code, uid)
+      if (editingUid === uid) {
+        setEditingUid(null)
+        setDraftNickname('')
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not remove player.')
+    } finally {
+      setBusyUid(null)
+    }
+  }
+
+  return (
+    <section className="card p-4">
+      <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-300">
+        Participant controls
+      </h3>
+      <div className="flex max-h-[24rem] flex-col gap-2 overflow-y-auto pr-1">
+        {players.map((p) => {
+          const isEditing = editingUid === p.uid
+          const isBusy = busyUid === p.uid
+          return (
+            <div key={p.uid} className="rounded-2xl border border-white/10 bg-white/5 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="truncate font-semibold text-slate-100">{p.nickname}</p>
+                  <p className="text-xs text-slate-400">Score {p.score.toLocaleString()}</p>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <button
+                    type="button"
+                    className="btn-ghost px-3 py-1.5 text-xs"
+                    disabled={isBusy}
+                    onClick={() => startRename(p.uid, p.nickname)}
+                  >
+                    Rename
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-danger px-3 py-1.5 text-xs"
+                    disabled={isBusy}
+                    onClick={() => onRemove(p.uid, p.nickname)}
+                  >
+                    Remove
+                  </button>
+                </div>
+              </div>
+              {isEditing && (
+                <form
+                  className="mt-3 flex items-center gap-2"
+                  onSubmit={(e) => {
+                    e.preventDefault()
+                    void saveRename(p.uid)
+                  }}
+                >
+                  <input
+                    value={draftNickname}
+                    onChange={(e) => setDraftNickname(e.target.value)}
+                    maxLength={20}
+                    className="input py-2 text-sm"
+                    autoFocus
+                  />
+                  {randomNamesOnly && (
+                    <button
+                      type="button"
+                      className="btn-ghost px-3 py-2 text-xs"
+                      disabled={isBusy}
+                      onClick={() => setDraftNickname(randomName())}
+                    >
+                      🎲 Random
+                    </button>
+                  )}
+                  <button type="submit" className="btn-primary px-3 py-2 text-xs" disabled={isBusy}>
+                    Save
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-ghost px-3 py-2 text-xs"
+                    disabled={isBusy}
+                    onClick={() => {
+                      setEditingUid(null)
+                      setDraftNickname('')
+                      setError(null)
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </form>
+              )}
+            </div>
+          )
+        })}
+        {players.length === 0 && (
+          <p className="rounded-2xl border border-dashed border-white/10 p-4 text-center text-sm text-slate-500">
+            No participants yet.
+          </p>
+        )}
+      </div>
+      {error && <p className="mt-3 text-sm text-choice-0">{error}</p>}
+    </section>
+  )
+}
+
 function Setup({
   onStarted,
   userEmail,
   initialUrl,
+  initialRandomNamesOnly,
   initialError,
 }: {
   onStarted: (code: string, quiz: Quiz) => void
   userEmail: string
   initialUrl: string
+  initialRandomNamesOnly: boolean
   initialError: HostError | null
 }) {
   const [url, setUrl] = useState(initialUrl)
+  const [randomNamesOnly, setRandomNamesOnly] = useState(initialRandomNamesOnly)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<HostError | null>(initialError)
 
@@ -327,7 +525,9 @@ function Setup({
     setError(null)
     try {
       const raw = await fetchQuiz(url.trim())
-      const { code, quiz } = await createSession(auth.currentUser!.uid, raw, url.trim())
+      const { code, quiz } = await createSession(auth.currentUser!.uid, raw, url.trim(), {
+        randomNamesOnly,
+      })
       onStarted(code, quiz)
     } catch (err) {
       setError(toHostError(err))
@@ -338,7 +538,7 @@ function Setup({
 
   // A reusable link an instructor can drop on a slide to jump straight into hosting.
   const hostLink = url.trim()
-    ? `${window.location.origin}/host?quiz=${encodeURIComponent(url.trim())}`
+    ? `${window.location.origin}/host?quiz=${encodeURIComponent(url.trim())}&randomNamesOnly=${randomNamesOnly ? '1' : '0'}`
     : ''
 
   return (
@@ -368,6 +568,15 @@ function Setup({
           <button type="submit" className="btn-primary text-lg" disabled={loading || !url.trim()}>
             {loading ? 'Loading…' : 'Load quiz & open lobby'}
           </button>
+          <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+            <input
+              type="checkbox"
+              checked={randomNamesOnly}
+              onChange={(e) => setRandomNamesOnly(e.target.checked)}
+              className="h-4 w-4 rounded border-white/20 bg-ink-900"
+            />
+            <span className="text-sm text-slate-200">Require randomly generated student names</span>
+          </label>
           {error && (
             <div className="rounded-2xl border border-choice-0/40 bg-choice-0/10 p-4 text-sm text-red-200">
               <p className="font-semibold">{error.message}</p>

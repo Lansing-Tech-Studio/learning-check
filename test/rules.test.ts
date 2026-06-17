@@ -41,6 +41,7 @@ beforeEach(async () => {
       status: 'question',
       currentIndex: 0,
       questionCount: 3,
+      randomNamesOnly: false,
     })
     await setDoc(doc(db, 'sessions', CODE, 'private', 'quiz'), {
       hostUid: HOST,
@@ -110,6 +111,58 @@ describe('players', () => {
   it('lets the host award a score', async () => {
     await assertSucceeds(updateDoc(doc(asHost(), 'sessions', CODE, 'players', STU_A), { score: 800 }))
   })
+
+  it('rejects nickname updates that are whitespace only', async () => {
+    await assertFails(updateDoc(doc(asStudentA(), 'sessions', CODE, 'players', STU_A), { nickname: '   ' }))
+    await assertFails(updateDoc(doc(asHost(), 'sessions', CODE, 'players', STU_A), { nickname: '   ' }))
+  })
+
+  it('rejects nickname updates over 20 characters', async () => {
+    await assertFails(
+      updateDoc(doc(asHost(), 'sessions', CODE, 'players', STU_A), {
+        nickname: 'x'.repeat(21),
+      }),
+    )
+  })
+
+  it('blocks creating a player doc for a removed uid', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'sessions', CODE, 'removed', STU_B), {
+        uid: STU_B,
+        removedAt: 1,
+      })
+    })
+
+    await assertFails(
+      setDoc(doc(testEnv.authenticatedContext(STU_B).firestore(), 'sessions', CODE, 'players', STU_B), {
+        uid: STU_B,
+        nickname: 'Second Try',
+        score: 0,
+      }),
+    )
+  })
+
+  it('enforces generated-style names when randomNamesOnly is true', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await updateDoc(doc(ctx.firestore(), 'sessions', CODE), { randomNamesOnly: true })
+    })
+
+    await assertFails(
+      setDoc(doc(asStudentA(), 'sessions', CODE, 'players', STU_A), {
+        uid: STU_A,
+        nickname: 'Custom Name',
+        score: 0,
+      }),
+    )
+
+    await assertSucceeds(
+      setDoc(doc(asStudentA(), 'sessions', CODE, 'players', STU_A), {
+        uid: STU_A,
+        nickname: 'PixelNinja',
+        score: 0,
+      }),
+    )
+  })
 })
 
 describe('responses', () => {
@@ -146,5 +199,23 @@ describe('responses', () => {
   it('hides other students answers, but the host can read them', async () => {
     await assertFails(getDoc(doc(asStudentA(), 'sessions', CODE, 'responses', `0_${STU_B}`)))
     await assertSucceeds(getDoc(doc(asHost(), 'sessions', CODE, 'responses', `0_${STU_B}`)))
+  })
+
+  it('rejects answers from a uid removed by the host', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'sessions', CODE, 'removed', STU_A), {
+        uid: STU_A,
+        removedAt: 1,
+      })
+    })
+
+    await assertFails(
+      setDoc(doc(asStudentA(), 'sessions', CODE, 'responses', `0_${STU_A}`), {
+        uid: STU_A,
+        questionIndex: 0,
+        choiceIndex: 1,
+        answeredAt: 3,
+      }),
+    )
   })
 })

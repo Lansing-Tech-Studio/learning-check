@@ -39,6 +39,8 @@ export interface SessionDoc {
   quizTitle: string
   workshop: string | null
   sourceUrl: string
+  /** When true, students may only join using generated adjective+noun names. */
+  randomNamesOnly: boolean
   status: SessionStatus
   questionCount: number
   currentIndex: number
