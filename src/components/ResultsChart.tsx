@@ -1,4 +1,4 @@
-import { ChoiceShape, choiceStyle } from './choices'
+import { ChoiceShape } from './choices'
 
 interface Props {
   choices: string[]
@@ -18,24 +18,23 @@ export function ResultsChart({ choices, tallies, correctIndex }: Props) {
           const count = tallies[i] ?? 0
           const heightPct = (count / max) * 100
           const isCorrect = i === correctIndex
-          const style = choiceStyle(i)
           return (
             <div key={i} className="flex h-full w-20 flex-col items-center justify-end gap-2 sm:w-28">
               <span className="font-display text-2xl font-bold tabular-nums">{count}</span>
               <div className="flex w-full flex-1 items-end">
                 <div
                   className={[
-                    style.bg,
+                    isCorrect ? 'bg-emerald-500/80' : 'bg-rose-500/70',
                     'w-full origin-bottom rounded-t-xl animate-grow-bar',
-                    isCorrect ? 'ring-4 ring-white shadow-lg' : 'opacity-60',
+                    isCorrect ? 'ring-4 ring-emerald-200/80 shadow-lg shadow-emerald-900/40' : 'opacity-70',
                   ].join(' ')}
                   style={{ height: `${Math.max(heightPct, 4)}%`, animationDelay: `${i * 80}ms` }}
                 />
               </div>
               <div
                 className={[
-                  'flex items-center gap-1.5 text-white',
-                  isCorrect ? 'opacity-100' : 'opacity-50',
+                  'flex items-center gap-1.5',
+                  isCorrect ? 'text-emerald-200 opacity-100' : 'text-rose-200 opacity-75',
                 ].join(' ')}
               >
                 <ChoiceShape index={i} className="h-5 w-5" />

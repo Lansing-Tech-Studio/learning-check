@@ -151,104 +151,113 @@ function HostConsole() {
       <div className="flex items-center justify-between pb-4">
         <div>
           <h1 className="font-display text-xl font-bold">{session.quizTitle}</h1>
-          <p className="text-sm text-slate-500">
-            {session.workshop ? `${session.workshop} · ` : ''}
-            {session.status === 'lobby'
-              ? 'Lobby'
-              : `Question ${session.currentIndex + 1} of ${session.questionCount}`}
-          </p>
+          {session.workshop && <p className="text-sm text-slate-400">{session.workshop}</p>}
         </div>
-        <span className="pill">{players.length} joined</span>
+        <div className="flex items-center gap-2">
+          <span className="pill-progress">
+            {session.status === 'lobby' && 'Lobby'}
+            {session.status === 'question' && `Question ${session.currentIndex + 1} of ${session.questionCount}`}
+            {session.status === 'reveal' && `Reveal ${session.currentIndex + 1} of ${session.questionCount}`}
+            {session.status === 'ended' && 'Final results'}
+          </span>
+          <span className="pill">{players.length} joined</span>
+        </div>
       </div>
 
-      {session.status === 'lobby' && (
-        <Lobby
-          code={code}
-          playerCount={players.length}
-          players={players}
-          canStart={!!quiz}
-          onStart={() => advance(0)}
-        />
-      )}
+      <div className="flex flex-1 flex-col gap-6 lg:flex-row lg:items-start">
+        <div className="flex min-w-0 flex-1 flex-col gap-6">
+          {session.status === 'lobby' && (
+            <Lobby
+              code={code}
+              playerCount={players.length}
+              players={players}
+              canStart={!!quiz}
+              onStart={() => advance(0)}
+            />
+          )}
 
-      {session.status === 'question' && session.currentQuestion && (
-        <div className="card flex flex-col items-center gap-6 p-6">
-          <div className="flex w-full items-start justify-between gap-4">
-            <h2 className="font-display text-2xl font-bold sm:text-3xl">
-              {session.currentQuestion.prompt}
-            </h2>
-            {session.questionStartedAt && (
-              <CountdownRing
-                startedAt={session.questionStartedAt}
-                seconds={session.currentQuestion.timeLimit}
-              />
-            )}
-          </div>
-          <AnswerTiles choices={session.currentQuestion.choices} presentation />
-          <button className="btn-primary text-lg" onClick={() => revealQuestion(code, quiz!, session.currentIndex)}>
-            Reveal answer →
-          </button>
-        </div>
-      )}
-
-      {session.status === 'reveal' &&
-        session.currentQuestion &&
-        session.currentTallies &&
-        session.revealedCorrectIndex != null && (
-          <div className="card flex flex-col items-center gap-6 p-6">
-            <h2 className="font-display text-2xl font-bold sm:text-3xl">
-              {session.currentQuestion.prompt}
-            </h2>
-            {session.currentTallies.some((n) => n > 0) ? (
-              <ResultsChart
-                choices={session.currentQuestion.choices}
-                tallies={session.currentTallies}
-                correctIndex={session.revealedCorrectIndex}
-              />
-            ) : (
-              // No answers came in (e.g. solo presenter mode) — just highlight the answer.
-              <AnswerTiles
-                choices={session.currentQuestion.choices}
-                correctIndex={session.revealedCorrectIndex}
-                presentation
-              />
-            )}
-            {quiz?.questions[session.currentIndex]?.explanation && (
-              <p className="max-w-2xl rounded-2xl bg-white/5 px-5 py-3 text-center text-slate-300">
-                {quiz.questions[session.currentIndex].explanation}
-              </p>
-            )}
-            <div className="flex gap-3">
-              {session.currentIndex + 1 < session.questionCount ? (
-                <button className="btn-primary text-lg" onClick={() => advance(session.currentIndex + 1)}>
-                  Next question →
-                </button>
-              ) : (
-                <button className="btn-primary text-lg" onClick={() => endSession(code)}>
-                  Finish & show results 🏆
-                </button>
-              )}
+          {session.status === 'question' && session.currentQuestion && (
+            <div className="card flex flex-col items-center gap-6 p-6">
+              <div className="flex w-full items-start justify-between gap-4">
+                <h2 className="font-display text-2xl font-bold sm:text-3xl">
+                  {session.currentQuestion.prompt}
+                </h2>
+                {session.questionStartedAt && (
+                  <CountdownRing
+                    startedAt={session.questionStartedAt}
+                    seconds={session.currentQuestion.timeLimit}
+                  />
+                )}
+              </div>
+              <AnswerTiles choices={session.currentQuestion.choices} presentation />
+              <button className="btn-primary text-lg" onClick={() => revealQuestion(code, quiz!, session.currentIndex)}>
+                Reveal answer →
+              </button>
             </div>
-          </div>
+          )}
+
+          {session.status === 'reveal' &&
+            session.currentQuestion &&
+            session.currentTallies &&
+            session.revealedCorrectIndex != null && (
+              <div className="card flex flex-col items-center gap-6 p-6">
+                <h2 className="font-display text-2xl font-bold sm:text-3xl">
+                  {session.currentQuestion.prompt}
+                </h2>
+                {session.currentTallies.some((n) => n > 0) ? (
+                  <ResultsChart
+                    choices={session.currentQuestion.choices}
+                    tallies={session.currentTallies}
+                    correctIndex={session.revealedCorrectIndex}
+                  />
+                ) : (
+                  // No answers came in (e.g. solo presenter mode) — just highlight the answer.
+                  <AnswerTiles
+                    choices={session.currentQuestion.choices}
+                    correctIndex={session.revealedCorrectIndex}
+                    presentation
+                  />
+                )}
+                {quiz?.questions[session.currentIndex]?.explanation && (
+                  <p className="max-w-2xl rounded-2xl bg-white/5 px-5 py-3 text-center text-slate-300">
+                    {quiz.questions[session.currentIndex].explanation}
+                  </p>
+                )}
+                <div className="flex gap-3">
+                  {session.currentIndex + 1 < session.questionCount ? (
+                    <button className="btn-primary text-lg" onClick={() => advance(session.currentIndex + 1)}>
+                      Next question →
+                    </button>
+                  ) : (
+                    <button className="btn-primary text-lg" onClick={() => endSession(code)}>
+                      Finish & show results 🏆
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
+          {session.status === 'ended' && (
+            <div className="card flex flex-col items-center gap-6 p-8">
+              <h2 className="font-display text-3xl font-bold">Final results 🏆</h2>
+              <div className="w-full max-w-md">
+                <Leaderboard players={players} podium />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {session.status !== 'ended' && (
+          <aside className="lg:w-80 lg:shrink-0">
+            <div className="lg:sticky lg:top-6">
+              <h3 className="mb-2 text-sm font-semibold uppercase tracking-wider text-slate-300">
+                Leaderboard
+              </h3>
+              <Leaderboard players={players} limit={5} />
+            </div>
+          </aside>
         )}
-
-      {session.status === 'ended' && (
-        <div className="card flex flex-col items-center gap-6 p-8">
-          <h2 className="font-display text-3xl font-bold">Final results 🏆</h2>
-          <div className="w-full max-w-md">
-            <Leaderboard players={players} podium />
-          </div>
-        </div>
-      )}
-
-      {session.status !== 'ended' && (
-        <div className="mt-6">
-          <h3 className="mb-2 text-sm font-semibold uppercase tracking-wider text-slate-500">
-            Leaderboard
-          </h3>
-          <Leaderboard players={players} limit={5} />
-        </div>
-      )}
+      </div>
     </Shell>
   )
 }

@@ -1,52 +1,30 @@
-// Each answer choice gets a distinct color AND shape, so the quiz is readable for
-// colour-blind students and works on a projector. Up to four choices are supported.
+// Shared visual metadata for answer choices. Up to four choices are supported.
 
 export interface ChoiceStyle {
   /** Tailwind background class. */
   bg: string
-  /** Solid hex (for SVG charts). */
+  /** Solid hex for any non-Tailwind rendering use-cases. */
   hex: string
   label: string
 }
 
 export const CHOICE_STYLES: ChoiceStyle[] = [
-  { bg: 'bg-choice-0', hex: '#ef4444', label: 'Triangle' },
-  { bg: 'bg-choice-1', hex: '#3b82f6', label: 'Diamond' },
-  { bg: 'bg-choice-2', hex: '#f59e0b', label: 'Circle' },
-  { bg: 'bg-choice-3', hex: '#22c55e', label: 'Square' },
+  { bg: 'bg-slate-600', hex: '#475569', label: 'A' },
+  { bg: 'bg-slate-600', hex: '#475569', label: 'B' },
+  { bg: 'bg-slate-600', hex: '#475569', label: 'C' },
+  { bg: 'bg-slate-600', hex: '#475569', label: 'D' },
 ]
 
 export function choiceStyle(index: number): ChoiceStyle {
   return CHOICE_STYLES[index % CHOICE_STYLES.length]
 }
 
-/** The shape glyph for a choice index, drawn in an SVG so it scales crisply. */
+/** Letter marker for a choice index (A-D). */
 export function ChoiceShape({ index, className = 'h-7 w-7' }: { index: number; className?: string }) {
-  const common = { fill: 'currentColor' }
-  switch (index % 4) {
-    case 0: // triangle
-      return (
-        <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
-          <path d="M12 3l9 16H3z" {...common} />
-        </svg>
-      )
-    case 1: // diamond
-      return (
-        <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
-          <path d="M12 2l10 10-10 10L2 12z" {...common} />
-        </svg>
-      )
-    case 2: // circle
-      return (
-        <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
-          <circle cx="12" cy="12" r="9" {...common} />
-        </svg>
-      )
-    default: // square
-      return (
-        <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
-          <rect x="3" y="3" width="18" height="18" rx="3" {...common} />
-        </svg>
-      )
-  }
+  const letter = CHOICE_STYLES[index % CHOICE_STYLES.length]?.label ?? 'A'
+  return (
+    <span className={`${className} inline-flex items-center justify-center font-display font-bold`} aria-hidden="true">
+      {letter}
+    </span>
+  )
 }

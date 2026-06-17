@@ -12,7 +12,7 @@ interface Props {
   presentation?: boolean
 }
 
-/** The grid of big, colorful, shape-coded answer buttons. */
+/** The grid of large, high-contrast answer buttons. */
 export function AnswerTiles({
   choices,
   selected,

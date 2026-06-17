@@ -161,8 +161,8 @@ function PlayRound({ code, uid }: { code: string; uid: string }) {
         {session.status === 'question' && session.currentQuestion && pickedIndex === session.currentIndex && (
           <div className="flex flex-1 flex-col gap-5">
             <div className="flex items-center justify-between">
-              <span className="pill">
-                Q{session.currentIndex + 1} / {session.questionCount}
+              <span className="pill-progress">
+                Question {session.currentIndex + 1} of {session.questionCount}
               </span>
               {session.questionStartedAt && (
                 <CountdownRing

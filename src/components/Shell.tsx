@@ -25,7 +25,7 @@ export function Shell({ children, wide }: { children: ReactNode; wide?: boolean 
       </header>
       <main
         className={`mx-auto flex w-full flex-1 flex-col px-5 pb-10 sm:px-8 ${
-          wide ? 'max-w-5xl' : 'max-w-xl'
+          wide ? 'max-w-6xl' : 'max-w-xl'
         }`}
       >
         {children}
