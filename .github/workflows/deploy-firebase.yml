@@ -71,12 +71,16 @@ jobs:
         run: npm install --global firebase-tools
 
       - name: Authenticate to Google Cloud via Workload Identity Federation
+        id: auth
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}
+          token_format: access_token
           create_credentials_file: true
           export_environment_variables: true
 
       - name: Deploy hosting and Firestore config
-        run: firebase deploy --project learning-check --only hosting,firestore:rules,firestore:indexes
+        env:
+          FIREBASE_TOKEN: ${{ steps.auth.outputs.access_token }}
+        run: firebase deploy --non-interactive --project learning-check --only hosting,firestore:rules,firestore:indexes
