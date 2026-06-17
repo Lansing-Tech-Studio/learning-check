@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "engines": {
+    "node": ">=24 <25"
+  },
   "description": "Live, instructor-driven Kahoot-style quiz app for Lansing Tech Studio workshops.",
   "scripts": {
     "dev": "vite",

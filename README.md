@@ -46,6 +46,8 @@ the generated **📎 Slide link**.
 
 ## Quick start (local development)
 
+Use Node 24 for local development.
+
 ```bash
 npm install
 
@@ -93,6 +95,7 @@ This repo includes a workflow at `.github/workflows/deploy-firebase.yml` that:
 
 - Runs tests and build on every push to `main`.
 - Deploys to Firebase only if those checks pass.
+- Uses Node 24 in CI.
 
 Set the following repository secret before using it:
 
