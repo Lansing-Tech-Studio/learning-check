@@ -104,6 +104,8 @@ Set the following repository secret before using it:
 - `GCP_WORKLOAD_IDENTITY_PROVIDER`: Full Workload Identity Provider resource name.
   - find this using GCP cloud shell and running `gcloud iam workload-identity-pools providers list --project=learning-check --location=global --workload-identity-pool=github-actions-pool --format="value(name)"`
 
+Before the auth with work, also need to enable [IAM Service Account Credentials API](https://console.cloud.google.com/apis/api/iamcredentials.googleapis.com/metrics?project=learning-check).
+
 The workflow deploys `hosting`, `firestore.rules`, and `firestore.indexes.json`.
 
 ## Tech
